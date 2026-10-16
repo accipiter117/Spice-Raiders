@@ -8,7 +8,7 @@ import {
 import { aiTurn } from '../ai/ai.js';
 import { MapView } from './mapview.js';
 import { renderTopbar, renderPanel } from './panel.js';
-import { preloadAssets, icon } from './assets.js';
+import { preloadAssets, icon, imageFor, unitSlot } from './assets.js';
 import { saveGame, loadGame, clearSave } from './save.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -22,7 +22,20 @@ const map = new MapView($('#map'), { onTap: onRegionTap });
 
 // ---------- Screens ----------
 
+function paintBackdrops() {
+  const title = imageFor('title');
+  for (const el of [$('#screen-start'), $('#rotate')]) el.style.backgroundImage = title ? `url(${title})` : '';
+  const brass = (el, slot, label) => {
+    const src = imageFor(slot);
+    el.classList.toggle('fallback', !src);
+    el.innerHTML = (src ? `<img src="${src}" alt="">` : '') + `<span>${label}</span>`;
+  };
+  brass($('#end-turn'), 'ui.endTurn', 'End turn');
+  brass($('#log-btn'), 'ui.log', 'Log');
+}
+
 function showStart() {
+  paintBackdrops();
   $('#screen-game').classList.add('hidden');
   $('#screen-start').classList.remove('hidden');
   closeModal();
@@ -34,11 +47,10 @@ function showStart() {
   $('#faction-cards').innerHTML = FACTION_IDS.map((id) => {
     const f = FACTIONS[id];
     const elite = UNITS[f.units.find((u) => UNITS[u].elite)];
-    return `<button class="faction-card" data-faction="${id}" style="border-color:${f.colour}">
-      <span class="emblem">${icon('faction.' + id)}</span>
-      <strong style="color:${f.colour}">${f.name}</strong>
+    return `<button class="faction-card" data-faction="${id}" style="--fc:${f.colour}">
+      <span class="head"><span class="emblem">${icon('faction.' + id)}</span><strong style="color:${f.ink}">${f.name}</strong></span>
       <p>${f.blurb}</p>
-      <span class="elite">Elite: ${icon('unit.' + elite.id)} ${elite.name}</span>
+      <span class="elite">${icon(unitSlot(elite.id, id))} Elite: ${elite.name}</span>
     </button>`;
   }).join('');
   for (const card of document.querySelectorAll('.faction-card')) {
@@ -155,7 +167,10 @@ $('#panel').addEventListener('click', (e) => {
 });
 
 $('#end-turn').addEventListener('click', endTurn);
-$('#menu-btn').addEventListener('click', showMenu);
+$('#log-btn').addEventListener('click', () => game && showLog());
+$('#topbar').addEventListener('click', (e) => {
+  if (e.target.closest('#menu-btn')) showMenu();
+});
 
 // Apply a player action; show the error as a toast if it is refused.
 function act(action) {
@@ -231,16 +246,20 @@ function toast(text, type = '') {
   const box = $('#toasts');
   const el = document.createElement('div');
   el.className = 'toast ' + type;
-  const slot = { worm: 'event.worm', combat: 'event.combat', tax: 'event.tax' }[type];
-  el.innerHTML = (slot ? icon(slot) + ' ' : '') + escapeHtml(text);
+  const slot = { worm: 'event.worm', combat: 'event.combat', tax: 'res.spice' }[type];
+  el.innerHTML = (slot ? icon(slot) : '') + `<span>${escapeHtml(text)}</span>`;
   box.appendChild(el);
   while (box.children.length > 3) box.firstChild.remove();
   setTimeout(() => el.classList.add('out'), 3800);
   setTimeout(() => el.remove(), 4300);
 }
 
-function openModal(html) {
-  $('#modal-box').innerHTML = html;
+function openModal(html, art = null) {
+  const box = $('#modal-box');
+  const src = art && imageFor(art);
+  box.classList.toggle('victory-art', !!src);
+  box.style.backgroundImage = src ? `linear-gradient(180deg, transparent 0, transparent 90px, var(--basalt) 190px), url(${src})` : '';
+  box.innerHTML = html;
   $('#modal').classList.remove('hidden');
 }
 
@@ -290,9 +309,9 @@ function showCombatCard(c) {
     <h2>${icon('event.combat')} Battle of ${escapeHtml(region)}</h2>
     <div class="big-result" style="color:${won ? 'var(--good)' : 'var(--bad)'}">${won ? 'Victory' : 'Defeat'}</div>
     <div class="card-vs">
-      <div class="card-side ${c.attackerWon ? 'won' : ''}"><div class="who" style="color:${FACTIONS[c.attacker].colour}">${name(c.attacker)}</div><div class="big">${c.attackStrength}</div><div class="note">attack</div></div>
+      <div class="card-side ${c.attackerWon ? 'won' : ''}"><div class="who" style="color:${FACTIONS[c.attacker].ink}">${name(c.attacker)}</div><div class="big">${c.attackStrength}</div><div class="note">attack</div></div>
       <div class="vs">vs</div>
-      <div class="card-side ${!c.attackerWon ? 'won' : ''}"><div class="who" style="color:${c.defender ? FACTIONS[c.defender].colour : 'var(--muted)'}">${c.defender ? name(c.defender) : 'Village militia'}${c.defender && c.hadMilitia ? ' + militia' : ''}</div><div class="big">${c.defenceStrength}</div><div class="note">defence</div></div>
+      <div class="card-side ${!c.attackerWon ? 'won' : ''}"><div class="who" style="color:${c.defender ? FACTIONS[c.defender].ink : 'var(--sand-soft)'}">${c.defender ? name(c.defender) : 'Village militia'}${c.defender && c.hadMilitia ? ' + militia' : ''}</div><div class="big">${c.defenceStrength}</div><div class="note">defence</div></div>
     </div>
     <div class="card-losses">
       <div><b>${name(c.attacker)}:</b> ${lossText(c.attackerLosses)}</div>
@@ -317,15 +336,15 @@ function showGameOver() {
   const rows = game.order
     .map((id) => game.factions[id])
     .sort((a, b) => b.hegemony - a.hegemony)
-    .map((f) => `<tr><td style="color:${FACTIONS[f.id].colour}">${FACTIONS[f.id].short}${f.id === me ? ' (you)' : ''}</td><td>${n(f.hegemony)} Hegemony</td><td>${f.alive ? '' : 'Fallen'}</td></tr>`)
+    .map((f) => `<tr><td style="color:${FACTIONS[f.id].ink}">${FACTIONS[f.id].short}${f.id === me ? ' (you)' : ''}</td><td>${n(f.hegemony)} Hegemony</td><td>${f.alive ? '' : 'Fallen'}</td></tr>`)
     .join('');
   clearSave();
   openModal(`
-    <div class="big-result" style="color:${won ? 'var(--accent)' : 'var(--bad)'}">${won ? 'Victory' : 'Defeat'}</div>
+    <div class="big-result" style="color:${won ? 'var(--gold)' : 'var(--bad)'}">${won ? 'Victory' : 'Defeat'}</div>
     <p style="text-align:center">${reasons[r.reason] || ''} Turn ${game.turn}.</p>
     <table class="standings">${rows}</table>
     <div class="modal-actions"><button data-modal="close">View map</button><button class="primary" data-modal="new">New game</button></div>
-  `);
+  `, won ? 'victory' : 'title');
   render();
 }
 
@@ -359,5 +378,9 @@ function escapeHtml(s) {
 }
 
 // ---------- Boot ----------
-preloadAssets(() => (game ? render() : showStart()));
+preloadAssets(() => {
+  paintBackdrops();
+  if (game) render();
+  else showStart();
+});
 showStart();

@@ -8,7 +8,7 @@ import {
   regionDef, unitsIn, incomeOf, upkeepOf, turnsUntilTax, annexBlocker, annexCost, harvesterIn,
   militiaStrength, defenceStrength, attackStrength, wormRisk, adjacentToTerritory, raidBlocker, harvesterBlocker, militiaSpec,
 } from '../engine/index.js';
-import { icon } from './assets.js';
+import { icon, unitSlot } from './assets.js';
 
 const n = (v) => Math.floor(v);
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
@@ -23,15 +23,16 @@ export function renderTopbar(state) {
   const res = (slot, value, delta, warn = false, title = '') =>
     `<span class="res${warn ? ' warn' : ''}" title="${title}">${icon(slot)}<b>${n(value)}</b>${delta !== null ? `<span class="delta">${sign(delta)}</span>` : ''}</span>`;
   return [
-    `<span class="topbar-faction" style="color:${FACTIONS[me].colour}">${icon('faction.' + me)}${FACTIONS[me].short}</span>`,
+    '<button id="menu-btn" aria-label="Menu">☰</button>',
+    `<span class="topbar-faction" style="color:${FACTIONS[me].ink}">${icon('faction.' + me)}${FACTIONS[me].short}</span>`,
     res('res.solari', f.solari, net, net < 0, 'Solari'),
     res('res.spice', f.spice, inc.spice, f.spice < state.tax.amount && due <= 2, 'Spice'),
     res('res.manpower', f.manpower, inc.manpower, false, 'Manpower'),
     res('res.authority', f.authority, inc.authority, false, 'Authority'),
     `<span class="res" title="Hegemony">${icon('res.hegemony')}<b>${n(f.hegemony)}</b><span class="delta">/${RULES.hegemonyToWin}</span></span>`,
     '<span class="topbar-spacer"></span>',
-    `<span>Turn <b>${state.turn}</b></span>`,
-    `<span class="tax-due">${icon('event.tax')} Tax <b>${state.tax.amount}</b> ${due === 0 ? '<b>this turn</b>' : `in ${due}`}</span>`,
+    `<span class="turn">TURN ${state.turn}</span>`,
+    `<span class="tax-due${due === 0 ? ' now' : ''}">${icon('res.spice')} Tax <b>${state.tax.amount}</b> ${due === 0 ? '<b>this turn</b>' : `in ${due}`}</span>`,
   ].join('');
 }
 
@@ -50,7 +51,7 @@ function overview(state) {
   const surplus = Math.max(0, f.spice - state.tax.amount);
   const rivals = state.order.filter((id) => id !== me).map((id) => {
     const r = state.factions[id];
-    return `<dt style="color:${FACTIONS[id].colour}">${FACTIONS[id].short}</dt><dd>${r.alive ? `${n(r.hegemony)} Hegemony` : 'Fallen'}</dd>`;
+    return `<dt style="color:${FACTIONS[id].ink}">${FACTIONS[id].short}</dt><dd>${r.alive ? `${n(r.hegemony)} Hegemony` : 'Fallen'}</dd>`;
   });
   return `
     <div class="p-title">${icon('faction.' + me)} ${FACTIONS[me].name}</div>
@@ -88,7 +89,7 @@ function unitRow(state, u, ui, mine) {
       : FACTIONS[u.faction].short;
   const tag = mine && !def.static ? 'button' : 'div';
   return `<${tag} class="unit-row${on ? ' on' : ''}${spent ? ' spent' : ''}" ${tag === 'button' ? `data-act="toggle" data-unit="${u.id}"` : ''}>
-    <span class="u-icon">${icon('unit.' + u.type)}</span>
+    <span class="u-icon">${icon(unitSlot(u.type, u.faction))}</span>
     <span class="u-name">${def.name}<div class="hp"><i style="width:${(100 * u.hp) / def.hp}%"></i></div></span>
     <span class="u-state">${status}</span>
   </${tag}>`;
@@ -102,7 +103,7 @@ function regionPanel(state, ui) {
   const seen = ui.visible.has(id);
   const owner = reg.owner;
   const isCap = Object.values(CAPITALS).includes(id);
-  const ownerText = !seen && owner !== me ? 'Unknown' : owner ? `<span style="color:${FACTIONS[owner].colour}">${FACTIONS[owner].short}</span>` : 'Neutral';
+  const ownerText = !seen && owner !== me ? 'Unknown' : owner ? `<span style="color:${FACTIONS[owner].ink}">${FACTIONS[owner].short}</span>` : 'Neutral';
   const facts = [
     `<dt>Terrain</dt><dd>${TERRAIN[def.terrain].name}${TERRAIN[def.terrain].wormRisk ? ' (worms)' : ''}</dd>`,
     `<dt>Owner</dt><dd>${ownerText}</dd>`,
@@ -140,12 +141,12 @@ function regionPanel(state, ui) {
 
   if (mine.length) {
     const movable = mine.filter((u) => !UNITS[u.type].static);
-    parts.push(`<div class="p-section"><h3>Your units${movable.length ? ' (tap to choose)' : ''}</h3><div class="units">${mine.map((u) => unitRow(state, u, ui, true)).join('')}</div></div>`);
     if (ui.mode !== 'orders' && movable.length) {
       const chosen = movable.filter((u) => ui.chosen.has(u.id));
       const canAct = chosen.some((u) => u.movesLeft > 0 || !u.attacked);
-      parts.push(`<div class="actions"><button class="primary" data-act="orders" ${chosen.length && canAct ? '' : 'disabled'}>Give orders <span class="cost">${chosen.length} unit(s)</span></button></div>`);
+      parts.push(`<div class="actions" style="margin-top:10px"><button class="primary" data-act="orders" ${chosen.length && canAct ? '' : 'disabled'}>Give orders <span class="cost">${chosen.length} unit(s)</span></button></div>`);
     }
+    parts.push(`<div class="p-section"><h3>Your units${movable.length ? ' (tap to choose)' : ''}</h3><div class="units">${mine.map((u) => unitRow(state, u, ui, true)).join('')}</div></div>`);
   }
   if (theirs.length) {
     parts.push(`<div class="p-section"><h3>Other units</h3><div class="units">${theirs.map((u) => unitRow(state, u, ui, false)).join('')}</div></div>`);
@@ -166,7 +167,7 @@ function regionActions(state, id) {
     const rows = FACTIONS[me].units.map((type) => {
       const u = UNITS[type];
       const ok = f.solari >= u.cost.solari && f.manpower >= u.cost.manpower;
-      return `<button data-act="recruit" data-unit="${type}" ${ok ? '' : 'disabled'}>${icon('unit.' + type)} ${u.name}<span class="cost">${u.cost.solari} Sol · ${u.cost.manpower} Man · ${u.upkeep}/turn</span></button>`;
+      return `<button data-act="recruit" data-unit="${type}" ${ok ? '' : 'disabled'}><span>${icon(unitSlot(type, me))} ${u.name}</span><span class="cost">${u.cost.solari} Sol · ${u.cost.manpower} Man · ${u.upkeep}/turn</span></button>`;
     });
     out.push(`<div class="p-section"><h3>Recruit (ready next turn)</h3><div class="actions">${rows.join('')}</div></div>`);
   }
@@ -175,12 +176,12 @@ function regionActions(state, id) {
     const blocker = harvesterBlocker(state, me, id);
     const mine = reg.owner === me || (!TERRAIN[def.terrain].ownable && !/territory/.test(blocker || ''));
     if (mine) {
-      out.push(`<div class="p-section"><h3>Spice</h3><div class="actions"><button data-act="harvester" ${blocker ? 'disabled' : ''}>${icon('unit.harvester')} ${reg.owner === me ? 'Build' : 'Send'} harvester<span class="cost">${c} Solari</span></button>${blocker ? `<div class="why">${esc(blocker)}</div>` : ''}</div></div>`);
+      out.push(`<div class="p-section"><h3>Spice</h3><div class="actions"><button data-act="harvester" ${blocker ? 'disabled' : ''}><span>${icon('unit.harvester')} ${reg.owner === me ? 'Build' : 'Send'} harvester</span><span class="cost">${c} Solari</span></button>${blocker ? `<div class="why">${esc(blocker)}</div>` : ''}</div></div>`);
     }
   }
   if (!reg.owner && TERRAIN[def.terrain].ownable && adjacentToTerritory(state, me, id)) {
     const blocker = annexBlocker(state, me, id);
-    out.push(`<div class="p-section"><h3>Annex peacefully</h3><div class="actions"><button data-act="annex" ${blocker ? 'disabled' : ''}>${icon('res.authority')} Annex ${def.village ? 'village' : 'region'}<span class="cost">${annexCost(state, me, id)} Authority</span></button>${blocker ? `<div class="why">${esc(blocker)}</div>` : ''}</div></div>`);
+    out.push(`<div class="p-section"><h3>Annex peacefully</h3><div class="actions"><button data-act="annex" ${blocker ? 'disabled' : ''}><span>${icon('res.authority')} Annex ${def.village ? 'village' : 'region'}</span><span class="cost">${annexCost(state, me, id)} Authority</span></button>${blocker ? `<div class="why">${esc(blocker)}</div>` : ''}</div></div>`);
   }
   const raid = FACTIONS[me].raid;
   if (raid && def.village && !reg.owner && !reg.hostile.includes(me)) {

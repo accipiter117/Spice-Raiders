@@ -17,6 +17,12 @@ export function preloadAssets(onChange) {
 }
 
 export const imageFor = (name) => loaded[name] || null;
+
+// Unit art can be per faction ('unit.ornithopter.fremen'), else per type.
+export function unitSlot(type, faction) {
+  const specific = `unit.${type}.${faction}`;
+  return ASSET_SLOTS[specific] ? specific : `unit.${type}`;
+}
 export const emojiFor = (name) => ASSET_SLOTS[name]?.fallback?.emoji || '';
 export const colourFor = (name) => ASSET_SLOTS[name]?.fallback?.colour || '#888';
 

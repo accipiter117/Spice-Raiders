@@ -5,7 +5,7 @@ import { FACTIONS } from '../data/factions.js';
 import { UNITS } from '../data/units.js';
 import { CAPITALS } from '../data/map.js';
 import { unitsIn } from '../engine/index.js';
-import { imageFor, colourFor, svgIcon } from './assets.js';
+import { imageFor, colourFor, svgIcon, unitSlot } from './assets.js';
 
 const full = {
   x: -BOARD.padding,
@@ -127,7 +127,7 @@ export class MapView {
     for (const t of ['rock', 'sand', 'deep']) {
       const src = imageFor('terrain.' + t);
       if (src) {
-        out.push(`<pattern id="tex-${t}" patternUnits="userSpaceOnUse" width="128" height="128"><image href="${src}" width="128" height="128"/></pattern>`);
+        out.push(`<pattern id="tex-${t}" patternUnits="userSpaceOnUse" width="180" height="180"><image href="${src}" width="180" height="180"/></pattern>`);
       }
     }
     out.push('</defs>');
@@ -160,18 +160,21 @@ export class MapView {
       out.push(`<text class="region-name" x="${cx}" y="${cy - 28}">${escape(r.name)}</text>`);
       if (r.village) {
         const isCap = Object.values(CAPITALS).includes(r.id);
-        out.push(svgIcon(isCap ? 'capital' : 'village', cx, cy - 12, isCap ? 20 : 17));
+        out.push(svgIcon(isCap ? 'capital' : 'village', cx, cy - 10, isCap ? 30 : 24));
       }
       if (r.spice > 0) {
-        const startX = cx - (r.spice - 1) * 4.5;
-        for (let i = 0; i < r.spice; i++) out.push(`<circle class="spice-dot" cx="${startX + i * 9}" cy="${r.village ? cy + 3 : cy - 12}" r="3.2"/>`);
+        const y = r.village ? cy + 5 : cy - 12;
+        const startX = cx - (r.spice - 1) * 6;
+        for (let i = 0; i < r.spice; i++) {
+          out.push(imageFor('spice') ? svgIcon('spice', startX + i * 12, y, 12) : `<circle class="spice-dot" cx="${startX + i * 12}" cy="${y}" r="3.2"/>`);
+        }
       }
       if (!seen) continue;
       const units = unitsIn(state, r.id);
       const harvester = units.find((u) => u.type === 'harvester');
-      if (harvester) out.push(svgIcon('unit.harvester', cx - 22, cy + 3, 14));
+      if (harvester) out.push(svgIcon('unit.harvester', cx - 24, cy + 8, 15));
       const army = units.filter((u) => u.type !== 'harvester');
-      if (army.length) out.push(stackBadge(army, cx, cy + 20));
+      if (army.length) out.push(stackBadge(army, cx, cy + 24));
     }
     this.svg.innerHTML = out.join('');
   }
@@ -188,15 +191,36 @@ function shrink(r) {
   return `matrix(${k} 0 0 ${k} ${cx * (1 - k)} ${cy * (1 - k)})`;
 }
 
+// A stack shows its strongest unit's art with a count, like a board-game token.
 function stackBadge(units, x, y) {
   const faction = units[0].faction;
+  const colour = FACTIONS[faction].colour;
   const best = [...units].sort((a, b) => UNITS[b.type].strength - UNITS[a.type].strength)[0];
   const ready = units.some((u) => u.movesLeft > 0 || !u.attacked);
+  const slot = unitSlot(best.type, faction);
+  const src = imageFor(slot);
+  const op = ready ? 1 : 0.7;
+  if (src && best.type === 'trooper') {
+    // the faction token has an empty centre: the count sits inside it
+    return `<g class="stack-badge" opacity="${op}">
+      <image href="${src}" x="${x - 13}" y="${y - 13}" width="26" height="26"/>
+      <text class="stack-count" x="${x}" y="${y + 0.5}">${units.length}</text>
+    </g>`;
+  }
+  if (src) {
+    const round = UNITS[best.type].elite;
+    return `<g class="stack-badge" opacity="${op}">
+      ${round ? `<circle cx="${x}" cy="${y}" r="13.5" fill="${colour}"/>` : ''}
+      <image href="${src}" x="${x - 13}" y="${y - 13}" width="26" height="26"/>
+      <circle cx="${x + 11}" cy="${y + 9}" r="6.5" fill="${colour}" stroke="#f3dfb2" stroke-width="1"/>
+      <text class="stack-count" x="${x + 11}" y="${y + 9.5}" style="font-size:8.5px">${units.length}</text>
+    </g>`;
+  }
   const w = 34;
-  return `<g class="stack-badge">
-    <rect x="${x - w / 2}" y="${y - 8}" width="${w}" height="16" rx="8" fill="${FACTIONS[faction].colour}" opacity="${ready ? 1 : 0.75}"/>
-    ${svgIcon('unit.' + best.type, x - 8, y, 12)}
-    <text x="${x + 8}" y="${y + 0.5}">${units.length}</text>
+  return `<g class="stack-badge" opacity="${op}">
+    <rect x="${x - w / 2}" y="${y - 8}" width="${w}" height="16" rx="8" fill="${colour}"/>
+    ${svgIcon(slot, x - 8, y, 12)}
+    <text class="stack-count" x="${x + 8}" y="${y + 0.5}">${units.length}</text>
   </g>`;
 }
 

@@ -9,7 +9,7 @@
   <title>Arrakis Wars</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -21,7 +21,7 @@
   <section id="screen-start" class="screen">
     <div class="start-inner">
       <h1>Arrakis Wars</h1>
-      <p class="tag">He who controls the spice controls the universe.</p>
+      <p class="tag">He who controls the spice controls the universe</p>
       <div id="continue-wrap"></div>
       <h2>Choose your faction</h2>
       <div id="faction-cards"></div>
@@ -34,11 +34,13 @@
       <div id="map-wrap">
         <svg id="map" xmlns="http://www.w3.org/2000/svg"></svg>
         <div id="map-hint"></div>
-        <button id="menu-btn" class="ghost" aria-label="Menu">☰</button>
       </div>
       <aside id="panel"></aside>
     </div>
-    <button id="end-turn">End Turn</button>
+    <div id="dock">
+      <button id="log-btn" class="brass" aria-label="Event log"></button>
+      <button id="end-turn" class="brass" aria-label="End turn"></button>
+    </div>
     <div id="toasts"></div>
     <div id="busy" class="hidden"><span id="busy-text"></span></div>
   </section>
