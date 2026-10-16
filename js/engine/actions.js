@@ -14,8 +14,8 @@
 
 import { RULES } from '../data/rules.js';
 import {
-  activeFaction, regionDef, unitDef, factionDef, annexBlocker, annexCost, harvesterIn,
-  needsAttack, adjacentToTerritory, unitsOf,
+  activeFaction, regionDef, unitDef, factionDef, annexBlocker, annexCost, harvesterBlocker,
+  needsAttack, militiaSpec, raidBlocker,
 } from './queries.js';
 import { addUnit, log, checkVictory, name } from './state.js';
 import { resolveAttack } from './combat.js';
@@ -50,9 +50,11 @@ const handlers = {
     if (!regionDef(from).neighbours.includes(a.to)) return 'You can only move to a neighbouring region.';
     if (units.some((u) => u.movesLeft <= 0)) return 'Some of those units have already moved.';
     if (needsAttack(state, faction, a.to)) return 'That region is defended. Attack it instead.';
+    // Desert stride: stepping onto rock ends a stride unit's movement
+    const ontoRock = regionDef(a.to).terrain === 'rock';
     for (const u of units) {
       u.region = a.to;
-      u.movesLeft -= 1;
+      u.movesLeft = ontoRock && factionDef(faction).desertStride ? 0 : u.movesLeft - 1;
     }
     return null;
   },
@@ -90,20 +92,16 @@ const handlers = {
     const f = state.factions[faction];
     f.authority -= annexCost(state, faction, a.region);
     state.regions[a.region].owner = faction;
-    if (regionDef(a.region).village) state.regions[a.region].militia = RULES.militia.owned.hp;
+    state.regions[a.region].militia = militiaSpec(state, a.region)?.hp || 0;
     log(state, 'annex', `${name(faction)} annexed ${regionDef(a.region).name}.`, { factions: [faction], region: a.region });
     return null;
   },
 
   buildHarvester(state, faction, a) {
     const f = state.factions[faction];
-    const reg = state.regions[a.region];
-    if (!reg) return 'Unknown region.';
-    if (reg.owner !== faction) return 'You can only build on your own land.';
-    if (regionDef(a.region).spice <= 0) return 'There is no spice field here.';
-    if (harvesterIn(state, a.region)) return 'There is already a harvester here.';
+    const blocker = harvesterBlocker(state, faction, a.region);
+    if (blocker) return blocker;
     const cost = unitDef('harvester').cost;
-    if (!canAfford(f, cost)) return `Needs ${cost.solari} Solari.`;
     f.solari -= cost.solari;
     f.manpower -= cost.manpower;
     addUnit(state, faction, 'harvester', a.region, { ready: false });
@@ -121,19 +119,13 @@ const handlers = {
   },
 
   raid(state, faction, a) {
+    const blocker = raidBlocker(state, faction, a.region);
+    if (blocker) return blocker;
     const raid = factionDef(faction).raid;
     const f = state.factions[faction];
-    const reg = state.regions[a.region];
-    if (!raid) return 'Your faction cannot raid.';
-    if (!reg || !regionDef(a.region).village) return 'You can only raid a village.';
-    if (reg.owner) return 'You can only raid neutral villages.';
-    if (f.raidedThisTurn) return 'You have already raided this turn.';
-    if (reg.hostile.includes(faction)) return 'This village has already been raided.';
-    const nearUnit = unitsOf(state, faction).some((u) => regionDef(u.region).neighbours.includes(a.region));
-    if (!adjacentToTerritory(state, faction, a.region) && !nearUnit) return 'Must border your territory or troops.';
     f.solari += raid.solari;
-    f.raidedThisTurn = true;
-    reg.hostile.push(faction);
+    f.nextRaid = state.turn + (raid.cooldown || 1);
+    state.regions[a.region].hostile.push(faction);
     log(state, 'raid', `${name(faction)} raided ${regionDef(a.region).name} for ${raid.solari} Solari. It is now hostile.`, {
       factions: [faction], region: a.region,
     });

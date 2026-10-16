@@ -6,7 +6,7 @@ import { TERRAIN, CAPITALS } from '../data/map.js';
 import { RULES } from '../data/rules.js';
 import {
   regionDef, unitsIn, incomeOf, upkeepOf, turnsUntilTax, annexBlocker, annexCost, harvesterIn,
-  militiaStrength, defenceStrength, attackStrength, wormRisk, adjacentToTerritory, unitsOf,
+  militiaStrength, defenceStrength, attackStrength, wormRisk, adjacentToTerritory, raidBlocker, harvesterBlocker, militiaSpec,
 } from '../engine/index.js';
 import { icon } from './assets.js';
 
@@ -109,7 +109,9 @@ function regionPanel(state, ui) {
   ];
   if (def.village) facts.push(`<dt>Village</dt><dd>${isCap ? 'Capital' : 'Yes'}${reg.hostile.includes(me) ? ' (hostile to you)' : ''}</dd>`);
   if (def.spice) facts.push(`<dt>Spice field</dt><dd>${'●'.repeat(def.spice)} (+${def.spice * RULES.income.spicePerField} a turn)</dd>`);
-  if (def.village && seen && owner !== me) facts.push(`<dt>Militia</dt><dd>strength ${n(militiaStrength(state, id))}</dd>`);
+  if (!TERRAIN[def.terrain].ownable) facts.push('<dt>Holding</dt><dd>Nobody can own deep desert</dd>');
+  if (def.sietch) facts.push('<dt>Sietch</dt><dd>Only the Fremen can annex it</dd>');
+  if (militiaSpec(state, id) && seen && owner !== me) facts.push(`<dt>${def.village ? 'Militia' : 'Garrison'}</dt><dd>strength ${n(militiaStrength(state, id, me))}</dd>`);
 
   const parts = [
     `<div class="p-title">${esc(def.name)}</div>`,
@@ -168,19 +170,23 @@ function regionActions(state, id) {
     });
     out.push(`<div class="p-section"><h3>Recruit (ready next turn)</h3><div class="actions">${rows.join('')}</div></div>`);
   }
-  if (reg.owner === me && def.spice > 0 && !harvesterIn(state, id)) {
+  if (def.spice > 0 && !harvesterIn(state, id)) {
     const c = UNITS.harvester.cost.solari;
-    out.push(`<div class="p-section"><h3>Spice</h3><div class="actions"><button data-act="harvester" ${f.solari >= c ? '' : 'disabled'}>${icon('unit.harvester')} Build harvester<span class="cost">${c} Solari</span></button></div></div>`);
+    const blocker = harvesterBlocker(state, me, id);
+    const mine = reg.owner === me || (!TERRAIN[def.terrain].ownable && !/territory/.test(blocker || ''));
+    if (mine) {
+      out.push(`<div class="p-section"><h3>Spice</h3><div class="actions"><button data-act="harvester" ${blocker ? 'disabled' : ''}>${icon('unit.harvester')} ${reg.owner === me ? 'Build' : 'Send'} harvester<span class="cost">${c} Solari</span></button>${blocker ? `<div class="why">${esc(blocker)}</div>` : ''}</div></div>`);
+    }
   }
-  if (!reg.owner && adjacentToTerritory(state, me, id)) {
+  if (!reg.owner && TERRAIN[def.terrain].ownable && adjacentToTerritory(state, me, id)) {
     const blocker = annexBlocker(state, me, id);
     out.push(`<div class="p-section"><h3>Annex peacefully</h3><div class="actions"><button data-act="annex" ${blocker ? 'disabled' : ''}>${icon('res.authority')} Annex ${def.village ? 'village' : 'region'}<span class="cost">${annexCost(state, me, id)} Authority</span></button>${blocker ? `<div class="why">${esc(blocker)}</div>` : ''}</div></div>`);
   }
   const raid = FACTIONS[me].raid;
   if (raid && def.village && !reg.owner && !reg.hostile.includes(me)) {
-    const near = adjacentToTerritory(state, me, id) || unitsOf(state, me).some((u) => regionDef(u.region).neighbours.includes(id));
-    if (near) {
-      out.push(`<div class="p-section"><h3>Raid</h3><div class="actions"><button class="danger" data-act="raid" ${f.raidedThisTurn ? 'disabled' : ''}>Raid village<span class="cost">+${raid.solari} Solari, turns hostile</span></button>${f.raidedThisTurn ? '<div class="why">One raid per turn.</div>' : ''}</div></div>`);
+    const blocker = raidBlocker(state, me, id);
+    if (!blocker || !blocker.startsWith('Must border')) {
+      out.push(`<div class="p-section"><h3>Raid</h3><div class="actions"><button class="danger" data-act="raid" ${blocker ? 'disabled' : ''}>Raid village<span class="cost">+${raid.solari} Solari, turns hostile</span></button>${blocker ? `<div class="why">${esc(blocker)}</div>` : ''}</div></div>`);
     }
   }
   return out.join('');
@@ -190,7 +196,7 @@ function attackConfirm(state, ui) {
   const me = state.player;
   const target = ui.confirmAttack;
   const units = [...ui.chosen].map((id) => state.units[id]).filter(Boolean);
-  const atk = attackStrength(state, units);
+  const atk = attackStrength(state, units, target);
   const dfn = defenceStrength(state, me, target);
   const ratio = dfn > 0 ? atk / dfn : Infinity;
   const verdict = ratio === Infinity ? 'Undefended. You will take it.' : ratio > 1.3 ? 'Good odds.' : ratio > 1 ? 'Risky: could go either way.' : 'Poor odds: likely defeat.';

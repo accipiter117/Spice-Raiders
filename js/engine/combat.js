@@ -32,11 +32,11 @@ export function resolveAttack(state, attackers, targetId) {
   const def = regionDef(targetId);
   const defenders = foreignUnits(state, attackerFaction, targetId);
   const defenderFaction = target.owner || (defenders[0] && defenders[0].faction) || null;
-  const militia = militiaStrength(state, targetId);
+  const militia = militiaStrength(state, targetId, attackerFaction);
   const terrain = RULES.combat.terrainDefence[def.terrain] || 1;
 
-  const baseAtk = attackStrength(state, attackers);
-  const baseDef = (attackStrength(state, defenders) + militia) * terrain;
+  const baseAtk = attackStrength(state, attackers, targetId);
+  const baseDef = (attackStrength(state, defenders, targetId) + militia) * terrain;
   const contested = baseDef > 0;
   const atk = contested ? baseAtk * roll(state) : baseAtk;
   const dfn = contested ? baseDef * roll(state) : 0;

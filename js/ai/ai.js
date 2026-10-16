@@ -9,10 +9,10 @@
 // v1 note: the AI sees the whole map (it ignores fog of war).
 
 import { RULES } from '../data/rules.js';
-import { REGIONS, CAPITALS } from '../data/map.js';
+import { REGIONS, CAPITALS, TERRAIN } from '../data/map.js';
 import {
   applyAction, regionDef, unitDef, factionDef, unitsOf, unitsIn, ownedRegions, ownedVillages,
-  annexBlocker, annexCost, harvesterIn, needsAttack, defenceStrength, attackStrength, unitStrength,
+  annexBlocker, annexCost, harvesterIn, harvesterBlocker, raidBlocker, needsAttack, militiaStrength, defenceStrength, attackStrength, unitStrength,
   incomeOf, upkeepOf, foreignUnits,
 } from '../engine/index.js';
 
@@ -92,10 +92,19 @@ function annex(state, faction) {
 function harvester(state, faction, t) {
   const f = state.factions[faction];
   const cost = unitDef('harvester').cost.solari;
-  if (f.solari - cost < upkeepOf(state, faction) + t.solariReserve) return [];
-  return ownedRegions(state, faction)
-    .filter((id) => regionDef(id).spice > 0 && !harvesterIn(state, id))
-    .sort((a, b) => regionDef(b).spice - regionDef(a).spice)
+  // A harvester pays for itself in a few turns: buy one whenever upkeep is still covered
+  if (f.solari - cost < upkeepOf(state, faction)) return [];
+  // Expected spice: field value, discounted by worm risk (Fremen risk is halved)
+  const worth = (id) => {
+    const base = RULES.worms[regionDef(id).terrain] || 0;
+    return regionDef(id).spice * (1 - 3 * base * factionDef(faction).wormMult);
+  };
+  // Unowned deep desert is only safe with no enemy troops nearby (unless the desert is home)
+  const exposed = (id) => !TERRAIN[regionDef(id).terrain].ownable && !factionDef(faction).supplyImmune.includes(regionDef(id).terrain)
+    && Object.values(state.units).some((u) => u.faction !== faction && !unitDef(u.type).static && hops(u.region, id) <= 2);
+  return REGIONS.map((r) => r.id)
+    .filter((id) => !harvesterBlocker(state, faction, id) && !exposed(id))
+    .sort((a, b) => worth(b) - worth(a))
     .map((id) => ({ type: 'buildHarvester', region: id }));
 }
 
@@ -109,8 +118,11 @@ function threatTo(state, faction, regionId) {
   return threat;
 }
 
+// Defence the region already has against an attacker: our units plus its militia.
 function garrison(state, faction, regionId) {
-  return attackStrength(state, unitsIn(state, regionId).filter((u) => u.faction === faction && !unitDef(u.type).static));
+  const units = attackStrength(state, unitsIn(state, regionId).filter((u) => u.faction === faction && !unitDef(u.type).static));
+  const terrain = RULES.combat.terrainDefence[regionDef(regionId).terrain] || 1;
+  return (units + militiaStrength(state, regionId)) * terrain;
 }
 
 function defendCapital(state, faction, t) {
@@ -187,8 +199,10 @@ function targetRegions(state, faction) {
       const soon = !reg.hostile.includes(faction) && authority + 2 * RULES.income.authority >= annexCost(state, faction, r.id);
       value = soon ? 2 : 8;
     } else {
-      value = 3; // enemy units in open desert
+      value = harvesterIn(state, r.id) ? 5 : 3; // enemy harvester or units in open desert
     }
+    // Ending a turn somewhere our troops waste away (deep desert, unless Fremen) is rarely worth it
+    if (harsh(faction, r.id)) value = Math.min(value, 1);
     out.push({ id: r.id, value });
   }
   return out;
@@ -220,8 +234,18 @@ function hops(a, b) {
   return hopCache.get(key);
 }
 
-// First step on a path towards goal that only passes through enterable regions.
+// Terrain where this faction's troops lose extra health outside their own land.
+function harsh(faction, regionId) {
+  const terrain = regionDef(regionId).terrain;
+  return TERRAIN[terrain].supplyLossMult > 1 && !factionDef(faction).supplyImmune.includes(terrain);
+}
+
+// First step towards goal through enterable regions, avoiding harsh terrain when possible.
 function stepTowards(state, faction, from, goal) {
+  return pathStep(state, faction, from, goal, true) || pathStep(state, faction, from, goal, false);
+}
+
+function pathStep(state, faction, from, goal, avoidHarsh) {
   const prev = new Map([[from, null]]);
   let frontier = [from];
   while (frontier.length) {
@@ -235,7 +259,7 @@ function stepTowards(state, faction, from, goal) {
           while (prev.get(step) !== from) step = prev.get(step);
           return step;
         }
-        if (!needsAttack(state, faction, n)) next.push(n);
+        if (!needsAttack(state, faction, n) && !(avoidHarsh && harsh(faction, n))) next.push(n);
       }
     }
     frontier = next;
@@ -260,7 +284,7 @@ function military(state, faction, t) {
       const threat = threatTo(state, faction, cap) * t.capitalSafety;
       if (threat > 0) {
         free.sort((a, b) => unitStrength(state, a) - unitStrength(state, b));
-        let kept = 0;
+        let kept = (militiaStrength(state, cap) * (RULES.combat.terrainDefence[regionDef(cap).terrain] || 1));
         while (free.length && kept < threat) kept += unitStrength(state, free.pop());
         if (!free.length) continue;
       }
@@ -275,6 +299,7 @@ function military(state, faction, t) {
       if (!tg) continue;
       const dfn = defenceStrength(state, faction, n);
       if (dfn > 0 && power < dfn * t.attackRatio) continue;
+      if (tg.value < 3) continue; // not worth a fight (or a death march into deep desert)
       const score = tg.value + (dfn === 0 ? 2 : 0);
       if (!bestAttack || score > bestAttack.score) bestAttack = { to: n, score };
     }
@@ -313,10 +338,9 @@ function military(state, faction, t) {
 }
 
 function raid(state, faction) {
-  if (!factionDef(faction).raid || state.factions[faction].raidedThisTurn) return [];
   if (state.factions[faction].solari >= 30) return [];
   // Raid villages we are not about to annex anyway
-  return REGIONS.filter((r) => r.village && !state.regions[r.id].owner && !state.regions[r.id].hostile.includes(faction))
+  return REGIONS.filter((r) => !raidBlocker(state, faction, r.id))
     .filter((r) => (annexBlocker(state, faction, r.id) || '').startsWith('Needs'))
     .map((r) => ({ type: 'raid', region: r.id }));
 }

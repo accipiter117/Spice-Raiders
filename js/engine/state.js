@@ -2,11 +2,11 @@
 // Helpers here mutate the state they are given; applyAction always hands
 // them a fresh copy, so the caller's state is never changed.
 
-import { REGIONS, CAPITALS, START_FIELDS } from '../data/map.js';
+import { REGIONS, REGION_BY_ID, CAPITALS, START_FIELDS, TERRAIN } from '../data/map.js';
 import { FACTIONS, FACTION_IDS } from '../data/factions.js';
 import { RULES } from '../data/rules.js';
 import { seedFrom } from './rng.js';
-import { unitDef, militiaSpec, ownedRegions } from './queries.js';
+import { unitDef, militiaSpec, ownedRegions, unitMoves } from './queries.js';
 import { startRound } from './turn.js';
 
 export const STATE_VERSION = 1;
@@ -45,12 +45,12 @@ export function createGame({ seed = Date.now(), player = null } = {}) {
       manpower: s.manpower,
       authority: s.authority,
       hegemony: 0,
-      raidedThisTurn: false,
+      nextRaid: 0, // turn when this faction may raid again
     };
     state.regions[CAPITALS[id]].owner = id;
     for (const type of s.units) addUnit(state, id, type, CAPITALS[id]);
     if (START_FIELDS[id]) {
-      state.regions[START_FIELDS[id]].owner = id;
+      if (TERRAIN[REGION_BY_ID[START_FIELDS[id]].terrain].ownable) state.regions[START_FIELDS[id]].owner = id;
       if (s.harvester) addUnit(state, id, 'harvester', START_FIELDS[id]);
     }
   }
@@ -71,7 +71,7 @@ export function addUnit(state, faction, type, region, { ready = true } = {}) {
     faction,
     region,
     hp: def.hp,
-    movesLeft: ready ? def.moves : 0,
+    movesLeft: ready ? unitMoves(faction, type) : 0,
     attacked: !ready,
   };
   return state.units[id];

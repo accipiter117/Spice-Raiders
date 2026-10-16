@@ -16,8 +16,8 @@ export const RULES = {
     capitalSolari: 6, // extra on top of the village amount
     capitalManpower: 2,
     authority: 3,
-    spicePerField: 4, // per point of spice field value, per harvester
-    hegemonyPerVillage: 0.5, // rounded down across all villages each turn
+    spicePerField: 2, // per point of spice field value, per harvester
+    hegemonyPerVillage: 0.25, // rounded down across all villages each turn
   },
 
   annex: {
@@ -31,8 +31,14 @@ export const RULES = {
     // a village defends itself with militia: strength at full health, and health
     neutral: { strength: 6, hp: 18 },
     owned: { strength: 4, hp: 12 },
-    capital: { strength: 12, hp: 36 },
-    regenPerTurn: 4,
+    capital: { strength: 30, hp: 90 }, // capitals are very hard to crack, as in Spice Wars
+    // Owned regions without a village keep a small garrison, so land is never free to take
+    outpost: { strength: 5, hp: 15 },
+    // A neutral Fremen sietch defends hard against everyone but the Fremen
+    sietch: { strength: 10, hp: 30 },
+    // A village you raided fights you harder
+    hostileMult: 1.5,
+    regenPerTurn: 6,
   },
 
   combat: {
@@ -57,9 +63,9 @@ export const RULES = {
 
   tax: {
     interval: 6, // due at the end of every 6th turn
-    firstAmount: 20,
-    increase: 10,
-    hegemonyPaid: 10,
+    firstAmount: 15,
+    increase: 7,
+    hegemonyPaid: 8,
     hegemonyMissed: 10,
     authorityMissed: 10,
   },

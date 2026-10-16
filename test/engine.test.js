@@ -1,8 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  createGame, applyAction, unitsIn, unitsOf, visibleRegions, annexCost, turnsUntilTax,
+  createGame, applyAction, unitsIn, unitsOf, visibleRegions, annexCost, turnsUntilTax, incomeOf,
+  needsAttack, militiaStrength,
 } from '../js/engine/index.js';
+import { FACTIONS } from '../js/data/factions.js';
 import { CAPITALS, START_FIELDS } from '../js/data/map.js';
 import { RULES } from '../js/data/rules.js';
 
@@ -116,6 +118,7 @@ test('Atreides annex for 25% less Authority', () => {
 
 test('annexing needs a border and enough Authority', () => {
   let s = createGame({ seed: 1, player: 'atreides' });
+  s.factions.atreides.authority = 0;
   assert.equal(applyAction(s, { type: 'annex', faction: 'atreides', region: 'tsimpo' }).ok, false);
   s.factions.atreides.authority = 50;
   assert.equal(applyAction(s, { type: 'annex', faction: 'atreides', region: 'carthag' }).ok, false);
@@ -143,11 +146,12 @@ test('selling spice pays Solari', () => {
   assert.equal(applyAction(s, { type: 'sellSpice', faction: 'fremen', amount: 999 }).ok, false);
 });
 
-test('only Harkonnen can raid, once per turn, and the village turns hostile', () => {
+test('only Harkonnen can raid, with a cooldown, and the village turns hostile', () => {
   let s = createGame({ seed: 1, player: 'harkonnen' });
   const solari = s.factions.harkonnen.solari;
   s = ok(applyAction(s, { type: 'raid', faction: 'harkonnen', region: 'harg-pass' }));
-  assert.equal(s.factions.harkonnen.solari, solari + 25);
+  assert.equal(s.factions.harkonnen.solari, solari + FACTIONS.harkonnen.raid.solari);
+  assert.ok(militiaStrength(s, 'harg-pass', 'harkonnen') > militiaStrength(s, 'harg-pass', 'atreides'));
   assert.ok(s.regions['harg-pass'].hostile.includes('harkonnen'));
   assert.equal(applyAction(s, { type: 'raid', faction: 'harkonnen', region: 'gara-kulon' }).ok, false);
   s.factions.harkonnen.authority = 100;
@@ -159,10 +163,12 @@ test('only Harkonnen can raid, once per turn, and the village turns hostile', ()
 test('ending a round pays income and counts down to tax', () => {
   let s = createGame({ seed: 1, player: 'atreides' });
   const before = s.factions.atreides.authority;
+  const income = incomeOf(s, 'atreides').authority;
+  assert.equal(income, RULES.income.authority + FACTIONS.atreides.authorityBonus);
   assert.equal(turnsUntilTax(s), RULES.tax.interval - 1);
   s = passRound(s);
   assert.equal(s.turn, 2);
-  assert.equal(s.factions.atreides.authority, before + RULES.income.authority);
+  assert.equal(s.factions.atreides.authority, before + income);
 });
 
 test('spice tax: paying gives Hegemony, missing costs Hegemony and Authority', () => {
@@ -224,4 +230,66 @@ test('fog of war: own land plus neighbours; Atreides see further', () => {
   assert.ok(h.has('carthag') && h.has('harg-pass'));
   assert.ok(!h.has('arrakeen'));
   assert.ok(visibleRegions(s, 'atreides').size > visibleRegions(s, 'harkonnen').size);
+});
+
+test('owned land without a village keeps a garrison, so it must be attacked', () => {
+  const s = createGame({ seed: 1, player: 'harkonnen' });
+  assert.equal(s.regions['hagga-basin'].owner, 'atreides');
+  assert.ok(needsAttack(s, 'harkonnen', 'hagga-basin'));
+  assert.equal(s.regions['hagga-basin'].militia, RULES.militia.outpost.hp);
+  assert.ok(militiaStrength(s, 'hagga-basin') > 0);
+});
+
+test('deep desert cannot be owned, but harvesters can be sent onto its spice', () => {
+  let s = createGame({ seed: 1, player: 'fremen' });
+  s.factions.fremen.authority = 50;
+  s.factions.fremen.solari = 100;
+  const annex = applyAction(s, { type: 'annex', faction: 'fremen', region: 'habbanya-erg' });
+  assert.equal(annex.ok, false);
+  assert.match(annex.error, /Deep desert/);
+  s = ok(applyAction(s, { type: 'buildHarvester', faction: 'fremen', region: 'habbanya-erg' }));
+  assert.equal(s.regions['habbanya-erg'].owner, null);
+  assert.equal(unitsIn(s, 'habbanya-erg')[0].type, 'harvester');
+  // too far from Fremen land
+  assert.equal(applyAction(s, { type: 'buildHarvester', faction: 'fremen', region: 'minor-erg' }).ok, false);
+});
+
+test('Fremen stride over the desert; stepping onto rock ends the move', () => {
+  let s = createGame({ seed: 1, player: 'fremen' });
+  const id = unitsIn(s, 'sietch-tabr').find((u) => u.type === 'trooper').id;
+  s = ok(applyAction(s, { type: 'move', faction: 'fremen', unitIds: [id], to: 'habbanya-erg' }));
+  s = ok(applyAction(s, { type: 'move', faction: 'fremen', unitIds: [id], to: 'great-flat' }));
+  assert.equal(s.units[id].movesLeft, 0);
+  let r = createGame({ seed: 1, player: 'fremen' });
+  const rid = unitsIn(r, 'sietch-tabr').find((u) => u.type === 'trooper').id;
+  r.units[rid].region = 'cielago-depression';
+  r = ok(applyAction(r, { type: 'move', faction: 'fremen', unitIds: [rid], to: 'false-wall-east' }));
+  assert.equal(r.units[rid].movesLeft, 0);
+  let a = createGame({ seed: 1, player: 'atreides' });
+  const aid = unitsIn(a, 'arrakeen').find((u) => u.type === 'trooper').id;
+  a = ok(applyAction(a, { type: 'move', faction: 'atreides', unitIds: [aid], to: 'hagga-basin' }));
+  assert.equal(applyAction(a, { type: 'move', faction: 'atreides', unitIds: [aid], to: 'great-flat' }).ok, false);
+});
+
+test('only the Fremen can win over a sietch peacefully', () => {
+  const s = createGame({ seed: 1 });
+  s.factions.atreides.authority = 100;
+  s.factions.fremen.authority = 100;
+  s.regions['shield-wall'].owner = 'atreides';
+  s.active = s.order.indexOf('atreides');
+  const a = applyAction(s, { type: 'annex', faction: 'atreides', region: 'habbanya-ridge' });
+  assert.equal(a.ok, false);
+  assert.match(a.error, /Fremen/);
+  s.active = s.order.indexOf('fremen');
+  ok(applyAction(s, { type: 'annex', faction: 'fremen', region: 'habbanya-ridge' }));
+  assert.ok(militiaStrength(s, 'habbanya-ridge') >= RULES.militia.sietch.strength);
+});
+
+test('Atreides villages defend harder than other houses\' villages', () => {
+  const s = createGame({ seed: 1 });
+  s.regions['tsimpo'].owner = 'atreides';
+  s.regions['harg-pass'].owner = 'harkonnen';
+  s.regions['tsimpo'].militia = RULES.militia.owned.hp;
+  s.regions['harg-pass'].militia = RULES.militia.owned.hp;
+  assert.ok(militiaStrength(s, 'tsimpo') > militiaStrength(s, 'harg-pass'));
 });

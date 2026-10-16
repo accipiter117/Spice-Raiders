@@ -6,7 +6,7 @@
 import { RULES } from '../data/rules.js';
 import { random } from './rng.js';
 import {
-  regionDef, unitDef, unitsOf, incomeOf, upkeepOf, wormRisk, supplyLoss, militiaSpec,
+  regionDef, unitDef, unitsOf, incomeOf, upkeepOf, wormRisk, supplyLoss, militiaSpec, unitMoves,
 } from './queries.js';
 import { log, leader, checkVictory, name } from './state.js';
 
@@ -24,7 +24,6 @@ export function startRound(state) {
     f.spice += inc.spice;
     f.authority += inc.authority;
     f.hegemony += inc.hegemony;
-    f.raidedThisTurn = false;
   }
   // Worm check for harvesters on sand and deep desert
   for (const u of Object.values(state.units)) {
@@ -38,7 +37,7 @@ export function startRound(state) {
     }
   }
   for (const u of Object.values(state.units)) {
-    u.movesLeft = unitDef(u.type).moves;
+    u.movesLeft = unitMoves(u.faction, u.type);
     u.attacked = false;
   }
   state.active = state.order.findIndex((id) => state.factions[id].alive);
