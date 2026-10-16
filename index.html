@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#140d08">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <title>Arrakis Wars</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="rotate">
+    <div class="rotate-icon">📱</div>
+    <p>Turn your phone sideways to play.</p>
+  </div>
+
+  <section id="screen-start" class="screen">
+    <div class="start-inner">
+      <h1>Arrakis Wars</h1>
+      <p class="tag">He who controls the spice controls the universe.</p>
+      <div id="continue-wrap"></div>
+      <h2>Choose your faction</h2>
+      <div id="faction-cards"></div>
+    </div>
+  </section>
+
+  <section id="screen-game" class="screen hidden">
+    <header id="topbar"></header>
+    <div id="main">
+      <div id="map-wrap">
+        <svg id="map" xmlns="http://www.w3.org/2000/svg"></svg>
+        <div id="map-hint"></div>
+        <button id="menu-btn" class="ghost" aria-label="Menu">☰</button>
+      </div>
+      <aside id="panel"></aside>
+    </div>
+    <button id="end-turn">End Turn</button>
+    <div id="toasts"></div>
+    <div id="busy" class="hidden"><span id="busy-text"></span></div>
+  </section>
+
+  <div id="modal" class="hidden"><div id="modal-box"></div></div>
+
+  <script type="module" src="js/ui/main.js"></script>
+</body>
+</html>
