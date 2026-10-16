@@ -1,0 +1,11 @@
+{
+  "name": "arrakis-wars",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Turn-based desert strategy prototype for the browser",
+  "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "sim": "node tools/sim.mjs"
+  }
+}
