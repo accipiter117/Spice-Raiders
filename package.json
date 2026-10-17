@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "test": "node --test",
-    "sim": "node tools/sim.mjs"
+    "sim": "node tools/sim.mjs",
+    "assets": "node tools/asset-list.mjs"
   }
 }

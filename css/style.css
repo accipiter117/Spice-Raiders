@@ -304,3 +304,22 @@ button.primary .cost { color: #3a1a06; }
 .standings { width: 100%; border-collapse: collapse; font-size: 12.5px; margin: 8px 0 12px; }
 .standings td { padding: 5px 6px; border-bottom: 1px solid var(--slab-3); }
 .standings td:nth-child(2) { font-family: var(--font-data); }
+
+/* How to play */
+#continue-wrap { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin: 4px 0; }
+#continue-wrap .cost { margin-left: 6px; }
+.guide { border: 1px solid var(--slab-3); background: rgba(40, 28, 18, 0.6); margin: 6px 0; }
+.guide summary {
+  cursor: pointer; list-style: none; padding: 8px 10px; display: flex; align-items: center; gap: 8px;
+  font: 700 12px var(--font-display); letter-spacing: 0.1em; text-transform: uppercase;
+}
+.guide summary::-webkit-details-marker { display: none; }
+.guide summary::after { content: '+'; margin-left: auto; font-family: var(--font-data); color: var(--spice); }
+.guide[open] summary::after { content: '\2212'; }
+.guide summary img { width: 22px; height: 22px; object-fit: contain; }
+.guide-body { padding: 0 12px 8px; font-size: 12.5px; }
+.guide-body ul { margin: 0; padding-left: 16px; }
+.guide-body li { margin: 4px 0; }
+.guide-body li img { width: 16px; height: 16px; vertical-align: -3px; }
+.guide-body b { color: var(--gold); }
+#modal-box { max-height: calc(100dvh - 24px); overflow-y: auto; }

@@ -9,7 +9,7 @@ import { seedFrom } from './rng.js';
 import { unitDef, militiaSpec, ownedRegions, unitMoves } from './queries.js';
 import { startRound } from './turn.js';
 
-export const STATE_VERSION = 1;
+export const STATE_VERSION = 2; // bump when the rules or map change shape: older saves are discarded
 const LOG_LIMIT = 300;
 
 export function createGame({ seed = Date.now(), player = null } = {}) {

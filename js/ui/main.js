@@ -9,13 +9,15 @@ import { aiTurn } from '../ai/ai.js';
 import { MapView } from './mapview.js';
 import { renderTopbar, renderPanel } from './panel.js';
 import { preloadAssets, icon, imageFor, unitSlot } from './assets.js';
-import { saveGame, loadGame, clearSave } from './save.js';
+import { saveGame, loadGame, clearSave, savedAt, hasSeenGuide, markGuideSeen } from './save.js';
+import { howToPlayHtml } from './howto.js';
 
 const $ = (sel) => document.querySelector(sel);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 let game = null;
 let busy = false;
+let warnedNoSave = false;
 const ui = { selected: null, chosen: new Set(), mode: 'idle', targets: null, confirmAttack: null, visible: new Set() };
 
 const map = new MapView($('#map'), { onTap: onRegionTap });
@@ -40,10 +42,12 @@ function showStart() {
   $('#screen-start').classList.remove('hidden');
   closeModal();
   const saved = loadGame();
-  $('#continue-wrap').innerHTML = saved
-    ? `<button class="primary" id="continue-btn">Continue as ${FACTIONS[saved.player].short} (turn ${saved.turn})</button>`
-    : '';
+  const when = savedAt();
+  $('#continue-wrap').innerHTML = `
+    ${saved ? `<button class="primary" id="continue-btn">Continue as ${FACTIONS[saved.player].short} <span class="cost">turn ${saved.turn}${when ? ', ' + ago(when) : ''}</span></button>` : ''}
+    <button id="howto-btn">How to play</button>`;
   if (saved) $('#continue-btn').onclick = () => startGame(saved);
+  $('#howto-btn').onclick = () => showHowTo();
   $('#faction-cards').innerHTML = FACTION_IDS.map((id) => {
     const f = FACTIONS[id];
     const elite = UNITS[f.units.find((u) => UNITS[u].elite)];
@@ -57,7 +61,9 @@ function showStart() {
     card.onclick = () => {
       const pick = card.dataset.faction;
       if (saved && !confirm('Start a new game? Your saved game will be replaced.')) return;
-      startGame(createGame({ seed: Date.now(), player: pick }));
+      const begin = () => startGame(createGame({ seed: Date.now(), player: pick }));
+      if (hasSeenGuide()) begin();
+      else showHowTo(begin);
     };
   }
 }
@@ -67,9 +73,27 @@ function startGame(state) {
   resetSelection();
   $('#screen-start').classList.add('hidden');
   $('#screen-game').classList.remove('hidden');
-  saveGame(game);
+  autosave();
   render();
-  turnStartNotices();
+  // A game closed while the other powers were moving picks up where it left off
+  if (game.order[game.active] !== game.player) runOtherTurns(game.logSeq);
+  else turnStartNotices();
+}
+
+function autosave() {
+  if (!saveGame(game) && !warnedNoSave) {
+    warnedNoSave = true;
+    toast('This browser is not letting the game save. Progress will be lost if you close it.', 'error');
+  }
+}
+
+function ago(t) {
+  const mins = Math.floor((Date.now() - t) / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins} min ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours} hr ago`;
+  return `${Math.floor(hours / 24)} day(s) ago`;
 }
 
 // ---------- Rendering ----------
@@ -185,7 +209,7 @@ function act(action) {
     if (e.type === 'annex' || e.type === 'raid') continue; // obvious from the panel
     toast(e.text, e.type);
   }
-  saveGame(game);
+  autosave();
   if (game.result) showGameOver();
   return true;
 }
@@ -196,6 +220,12 @@ async function endTurn() {
   const res = applyAction(game, { type: 'endTurn', faction: game.player });
   if (!res.ok) return toast(res.error, 'error');
   game = res.state;
+  autosave();
+  await runOtherTurns(fromSeq);
+}
+
+// Let the computer powers move until it is the player's turn again.
+async function runOtherTurns(fromSeq) {
   busy = true;
   resetSelection();
   render();
@@ -205,12 +235,13 @@ async function endTurn() {
     $('#busy-text').textContent = `${FACTIONS[f].short} are making their moves...`;
     await sleep(450);
     game = aiTurn(game, f).state;
+    autosave();
     render();
   }
   $('#busy').classList.add('hidden');
   busy = false;
   reportEvents(fromSeq);
-  saveGame(game);
+  autosave();
   render();
   if (game.result) showGameOver();
   else turnStartNotices();
@@ -278,6 +309,18 @@ $('#modal').addEventListener('click', (e) => {
     showStart();
   }
   if (a === 'log') showLog();
+  if (a === 'howto') showHowTo();
+  if (a === 'title') {
+    autosave();
+    game = null;
+    showStart();
+  }
+  if (a === 'begin') {
+    const next = pendingStart;
+    pendingStart = null;
+    closeModal();
+    if (next) next();
+  }
   if (a === 'quit') {
     if (confirm('Abandon this game? It will be deleted.')) {
       clearSave();
@@ -355,10 +398,23 @@ function showMenu() {
     <div class="actions" style="display:flex;flex-direction:column;gap:8px">
       <button data-modal="close">Back to the game</button>
       <button data-modal="log">Event log</button>
+      <button data-modal="howto">How to play</button>
+      <button data-modal="title">Save and return to title</button>
       <button data-modal="quit" class="danger">Abandon game</button>
     </div>
     <p class="note" style="margin-top:10px">Your game saves automatically.</p>
   `);
+}
+
+// The guide; when `then` is given (first game) it ends with a Start button.
+let pendingStart = null;
+function showHowTo(then = null) {
+  pendingStart = then;
+  if (then) markGuideSeen();
+  openModal(`${howToPlayHtml()}
+    <div class="modal-actions" style="margin-top:10px">
+      ${then ? '<button class="primary" data-modal="begin">Start the game</button>' : '<button class="primary" data-modal="close">Close</button>'}
+    </div>`);
 }
 
 function showLog() {

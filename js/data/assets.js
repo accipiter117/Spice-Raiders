@@ -10,7 +10,7 @@
 
 export const ASSET_SLOTS = {
   // Painted board. Region outlines are drawn on top of it. (Not made yet.)
-  board: { file: 'assets/board.webp', fallback: { colour: '#120c08' }, size: '563x325 (or larger, same ratio)' },
+  board: { file: 'assets/board.webp', optional: true, fallback: { colour: '#120c08' }, size: '563x325 (or larger, same ratio)' },
 
   // Terrain textures, tiled inside each region (cut from the My Arrakis map)
   'terrain.rock': { file: 'assets/terrain-rock.webp', fallback: { colour: '#7a5a3e' }, size: '256x256 seamless tile' },
@@ -56,7 +56,6 @@ export const ASSET_SLOTS = {
   // Brass buttons (My Arrakis)
   'ui.endTurn': { file: 'assets/ui-end-turn.webp', fallback: { emoji: '⏩' }, size: '240x176' },
   'ui.log': { file: 'assets/ui-log.webp', fallback: { emoji: '📜' }, size: '240x176' },
-  'ui.menu': { file: 'assets/ui-menu.webp', fallback: { emoji: '☰' }, size: '240x176' },
 
   // Title and end screens (My Arrakis)
   title: { file: 'assets/title.webp', fallback: { colour: '#1a110b' }, size: '1280x720' },

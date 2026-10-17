@@ -67,3 +67,10 @@ test('every asset slot has a fallback, and every unit and faction has a slot', (
   for (const u of Object.keys(UNITS)) assert.ok(ASSET_SLOTS['unit.' + u], u);
   for (const f of FACTION_IDS) assert.ok(ASSET_SLOTS['faction.' + f], f);
 });
+
+test('README art list matches the asset slots (run npm run assets to refresh)', async () => {
+  const { readFileSync } = await import('node:fs');
+  const { assetTable, withAssetTable } = await import('../tools/asset-list.mjs');
+  const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8');
+  assert.equal(readme, withAssetTable(readme, assetTable()));
+});
