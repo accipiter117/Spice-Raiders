@@ -60,10 +60,10 @@ function showStart() {
   for (const card of document.querySelectorAll('.faction-card')) {
     card.onclick = () => {
       const pick = card.dataset.faction;
-      if (saved && !confirm('Start a new game? Your saved game will be replaced.')) return;
       const begin = () => startGame(createGame({ seed: Date.now(), player: pick }));
-      if (hasSeenGuide()) begin();
-      else showHowTo(begin);
+      const go = () => (hasSeenGuide() ? begin() : showHowTo(begin));
+      if (saved) askConfirm(`Start a new game as ${FACTIONS[pick].short}? Your saved game will be replaced.`, 'Start new game', go);
+      else go();
     };
   }
 }
@@ -322,11 +322,17 @@ $('#modal').addEventListener('click', (e) => {
     if (next) next();
   }
   if (a === 'quit') {
-    if (confirm('Abandon this game? It will be deleted.')) {
+    askConfirm('Abandon this game? It will be deleted.', 'Abandon game', () => {
       clearSave();
       game = null;
       showStart();
-    }
+    });
+  }
+  if (a === 'confirm-yes') {
+    const next = pendingConfirm;
+    pendingConfirm = null;
+    closeModal();
+    if (next) next();
   }
 });
 
@@ -404,6 +410,14 @@ function showMenu() {
     </div>
     <p class="note" style="margin-top:10px">Your game saves automatically.</p>
   `);
+}
+
+// In-page confirmation (browser confirm() pop-ups are not available everywhere).
+let pendingConfirm = null;
+function askConfirm(text, yesLabel, onYes) {
+  pendingConfirm = onYes;
+  openModal(`<h2>Are you sure?</h2><p>${escapeHtml(text)}</p>
+    <div class="modal-actions"><button data-modal="close">Cancel</button><button class="danger" data-modal="confirm-yes">${escapeHtml(yesLabel)}</button></div>`);
 }
 
 // The guide; when `then` is given (first game) it ends with a Start button.
